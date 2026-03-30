@@ -1,18 +1,7 @@
-// src/agent/agent.ts
 import { openai } from "../lib/openai";
 import { buildSystemPrompt } from "../prompts/system";
 import { searchKnowledge } from "../tools/searchKnowledge";
-
-// Match the type returned by searchKnowledge
-export type Document = {
-  id: number;
-  slug: string;
-  question: string;
-  fullAnswer: string;
-  shortSnippet: string;
-  metaTitle?: string;
-  metaDescription?: string;
-};
+import { Document } from "../types/document";
 
 export async function runAgent(message: string) {
   const system = buildSystemPrompt();
@@ -28,9 +17,7 @@ export async function runAgent(message: string) {
         description: "Search internal knowledge about RiverCity Bike Rentals",
         parameters: {
           type: "object",
-          properties: {
-            query: { type: "string" },
-          },
+          properties: { query: { type: "string" } },
           required: ["query"],
           additionalProperties: false,
         },
@@ -51,12 +38,12 @@ export async function runAgent(message: string) {
   if (functionCall && functionCall.name === "searchKnowledge") {
     const args = JSON.parse(functionCall.arguments);
 
-    // 3️⃣ Run your internal search
+    // 3️⃣ Run internal search
     const results: Document[] = await searchKnowledge(args.query);
 
-    // 4️⃣ Map search results to correct OpenAI output format
+    // 4️⃣ Map search results to OpenAI function output format
     const functionCallOutput = results.map((doc) => ({
-      type: "input_text" as const, // ✅ TS requires literal "input_text"
+      type: "input_text" as const, // TS literal type
       text: doc.fullAnswer,
     }));
 
@@ -67,7 +54,7 @@ export async function runAgent(message: string) {
       input: [
         { role: "system", content: system },
         { role: "user", content: message },
-        functionCall, // include original tool request
+        functionCall,
         {
           type: "function_call_output",
           call_id: functionCall.call_id,
