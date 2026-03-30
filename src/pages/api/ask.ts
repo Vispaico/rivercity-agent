@@ -1,6 +1,6 @@
 // src/pages/api/ask.ts
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { runAgent } from '../../agent/agent'
+import { runAgent } from '../../agent/agent.js'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { question } = req.body

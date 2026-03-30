@@ -1,5 +1,5 @@
-import { openai } from "../lib/openai";
-import { supabase } from "../lib/supabase";
+import { openai } from "../lib/openai.js";
+import { supabase } from "../lib/supabase.js";
 
 export async function retrieveKnowledge(query: string) {
   const embedding = await openai.embeddings.create({

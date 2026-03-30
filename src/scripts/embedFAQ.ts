@@ -1,7 +1,7 @@
 // src/scripts/embedFAQ.ts
 import 'dotenv/config'           // ensure env vars are loaded
-import { supabase } from '../lib/supabase'   // your Supabase client
-import { embed } from '../lib/embed'         // your embed helper
+import { supabase } from '../lib/supabase.js'   // your Supabase client
+import { embed } from '../lib/embed.js'         // your embed helper
 import faqData from '../data/faqData.json'   // your copied JSON
 
 interface FAQItem {

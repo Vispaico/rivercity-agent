@@ -1,7 +1,7 @@
-import { openai } from "../lib/openai";
-import { buildSystemPrompt } from "../prompts/system";
-import { searchKnowledge } from "../tools/searchKnowledge";
-import { Document } from "../types/document";
+import { openai } from "../lib/openai.js";
+import { buildSystemPrompt } from "../prompts/system.js";
+import { searchKnowledge } from "../tools/searchKnowledge.js";
+import { Document } from "../types/document.js";
 
 export async function runAgent(message: string) {
   const system = buildSystemPrompt();

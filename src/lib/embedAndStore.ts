@@ -1,6 +1,6 @@
 // src/lib/embedAndStore.ts
-import { supabase } from './supabase'
-import { embed } from './embed'
+import { supabase } from './supabase.js'
+import { embed } from './embed.js'
 
 interface EmbedItem {
   content: string

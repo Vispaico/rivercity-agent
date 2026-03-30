@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import { supabase } from "../lib/supabase";
-import { Document } from "../types/document";
+import { supabase } from "../lib/supabase.js";
+import { Document } from "../types/document.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
