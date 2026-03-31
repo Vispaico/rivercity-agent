@@ -16,7 +16,7 @@ export async function askAgent(userMessage: string) {
 
   // 2. HARD FILTER
   const threshold = intent === "business" ? 0.65 : 0.55;
-  const filtered = docs.filter((d) => (d.score ?? d.confidence ?? 0) >= threshold);
+  const filtered = docs.filter((d) => Number(d.score ?? d.confidence ?? 0) >= threshold);
 
   if (!filtered.length) {
     return "I'm not sure about that, let me check with our team.";

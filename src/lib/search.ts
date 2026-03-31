@@ -40,17 +40,21 @@ function rankAndFilter(docs: any[]) {
 
   return docs
     .filter((doc) => {
-      if (!doc.fullAnswer) return false;
+      const answer = (doc.fullAnswer || doc.content || "").trim();
+      if (!answer) return false;
+
+      const normalized = answer.toLowerCase().replace(/\s+/g, " ");
 
       // remove duplicates
-      if (seen.has(doc.fullAnswer)) return false;
-      seen.add(doc.fullAnswer);
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
 
       return true;
     })
     .map((doc) => ({
       ...doc,
-      score: (doc.confidence || 0.5),
+      fullAnswer: (doc.fullAnswer || doc.content || "").trim(),
+      score: Number(doc.confidence ?? 0.5),
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
