@@ -1,10 +1,5 @@
 import { supabase } from "./supabase.js";
 
-type AvailabilityRow = {
-  vehicle_id: string;
-  available_count: number;
-};
-
 type VehicleRow = {
   id: string;
   name?: string | null;
@@ -38,6 +33,7 @@ type BookingSession = {
   availableVehicles?: { vehicle: VehicleRow; available: number }[];
   selectedVehicleId?: string;
   intake?: BookingIntake;
+  lastPrompt?: "ask_dates" | "no_availability" | "clarify_vehicle" | "ask_intake";
 };
 
 type StoredSession = {
@@ -54,6 +50,8 @@ export async function handleBookingRequest(
   await cleanupExpiredSessions();
   const session = await getSession(sessionId);
   const intent = isBookingIntent(message);
+  const availabilityInquiry = isAvailabilityInquiry(message);
+  const goodbye = isGoodbyeIntent(message);
 
   if (!intent && !session.active) return null;
 
@@ -62,8 +60,19 @@ export async function handleBookingRequest(
     return bookingCopy(userLanguage).cancelled;
   }
 
+  if (goodbye) {
+    await clearSession(sessionId);
+    return bookingCopy(userLanguage).goodbye;
+  }
+
   session.active = true;
   await upsertSession(sessionId, session);
+
+  if (session.lastPrompt === "no_availability" && isNegativeResponse(message)) {
+    session.lastPrompt = "ask_dates";
+    await upsertSession(sessionId, session);
+    return bookingCopy(userLanguage).askDates;
+  }
 
   const dates = extractDates(message) ?? {
     startDate: session.startDate,
@@ -71,6 +80,19 @@ export async function handleBookingRequest(
   };
   if (!dates?.startDate || !dates?.endDate) {
     session.active = true;
+    session.lastPrompt = "ask_dates";
+    if (availabilityInquiry) {
+      const availableVehicles = await getAvailableVehicles();
+      session.availableVehicles = availableVehicles.length
+        ? availableVehicles
+        : session.availableVehicles;
+      await upsertSession(sessionId, session);
+      return formatAvailabilityList(
+        userLanguage,
+        session.availableVehicles ?? []
+      );
+    }
+
     await upsertSession(sessionId, session);
     return bookingCopy(userLanguage).askDates;
   }
@@ -84,24 +106,9 @@ export async function handleBookingRequest(
   session.quantity = quantity;
 
   if (!session.availableVehicles) {
-    const availability = await getAvailability(startDate, endDate);
-    if (!availability.length) {
-      await upsertSession(sessionId, session);
-      return bookingCopy(userLanguage).noAvailability;
-    }
-
-    const vehicles = await getVehiclesByIds(
-      availability.map((row) => row.vehicle_id)
-    );
-
-    const availableVehicles = vehicles
-      .map((vehicle) => {
-        const match = availability.find((row) => row.vehicle_id === vehicle.id);
-        return match ? { vehicle, available: match.available_count } : null;
-      })
-      .filter(Boolean) as { vehicle: VehicleRow; available: number }[];
-
+    const availableVehicles = await getAvailableVehicles();
     if (!availableVehicles.length) {
+      session.lastPrompt = "no_availability";
       await upsertSession(sessionId, session);
       return bookingCopy(userLanguage).noAvailability;
     }
@@ -117,11 +124,13 @@ export async function handleBookingRequest(
   );
 
   if (selected.length === 0) {
+    session.lastPrompt = "clarify_vehicle";
     await upsertSession(sessionId, session);
     return formatAvailabilityList(userLanguage, session.availableVehicles);
   }
 
   if (selected.length > 1) {
+    session.lastPrompt = "clarify_vehicle";
     await upsertSession(sessionId, session);
     return bookingCopy(userLanguage).clarifyVehicle(
       selected.map((vehicle) => formatVehicle(vehicle)).join("\n")
@@ -136,6 +145,7 @@ export async function handleBookingRequest(
 
   const missing = missingIntakeFields(intake);
   if (missing.length) {
+    session.lastPrompt = "ask_intake";
     await upsertSession(sessionId, session);
     return bookingCopy(userLanguage).askIntake(missing.join(", "));
   }
@@ -151,6 +161,7 @@ export async function handleBookingRequest(
   intake.day_count = dayCount;
 
   if (!session.selectedVehicleId) {
+    session.lastPrompt = "clarify_vehicle";
     await upsertSession(sessionId, session);
     return bookingCopy(userLanguage).clarifyVehicle(
       session.availableVehicles
@@ -187,10 +198,38 @@ function isCancelIntent(message: string) {
   return /\b(cancel|stop|reset|start over|clear)\b/i.test(message);
 }
 
+function isGoodbyeIntent(message: string) {
+  return /\b(thank you|thanks|goodbye|bye|see you|ok thanks|ok thank you|gracias|adios|chau|cảm ơn|tạm biệt)\b/i.test(
+    message
+  );
+}
+
+function isNegativeResponse(message: string) {
+  return /\b(no|nope|nah|không|ko|not really|no thanks)\b/i.test(message);
+}
+
+function isAvailabilityInquiry(message: string) {
+  return /\b(available|availability|what dates|when|which dates|vehicles available|what vehicles|what do you have)\b/i.test(
+    message
+  );
+}
+
 function extractDates(message: string) {
-  const matches = message.match(/\d{4}-\d{2}-\d{2}/g);
-  if (!matches || matches.length < 2) return null;
-  return { startDate: matches[0], endDate: matches[1] };
+  const isoMatches = message.match(/\d{4}-\d{2}-\d{2}/g);
+  if (isoMatches && isoMatches.length >= 2) {
+    return { startDate: isoMatches[0], endDate: isoMatches[1] };
+  }
+
+  const dotMatches = message.match(/\d{2}\.\d{2}\.\d{4}/g);
+  if (dotMatches && dotMatches.length >= 2) {
+    const normalized = dotMatches.map((value) => {
+      const [day, month, year] = value.split(".");
+      return `${year}-${month}-${day}`;
+    });
+    return { startDate: normalized[0], endDate: normalized[1] };
+  }
+
+  return null;
 }
 
 function extractVehiclePreference(message: string) {
@@ -242,36 +281,25 @@ function missingIntakeFields(intake: BookingIntake) {
   return missing;
 }
 
-async function getAvailability(startDate: string, endDate: string) {
-  const { data, error } = await supabase.rpc("get_vehicle_availability", {
-    p_start_date: startDate,
-    p_end_date: endDate,
-  });
-
-  if (error) {
-    console.error("[booking] availability error:", error);
-    return [];
-  }
-
-  return (data as AvailabilityRow[]) || [];
-}
-
-async function getVehiclesByIds(ids: string[]) {
-  if (!ids.length) return [];
-
+async function getAvailableVehicles() {
   const { data, error } = await supabase
     .from("vehicles")
     .select(
-      "id,name,brand,model,type,price_per_hour,price_per_day,price_per_week,price_per_month,currency"
+      "id,name,brand,model,type,price_per_hour,price_per_day,price_per_week,price_per_month,currency,inventory_count,active"
     )
-    .in("id", ids);
+    .eq("active", true)
+    .gt("inventory_count", 0);
 
   if (error) {
     console.error("[booking] vehicles fetch error:", error);
     return [];
   }
 
-  return (data as VehicleRow[]) || [];
+  const vehicles = (data as (VehicleRow & { inventory_count?: number })[]) || [];
+  return vehicles.map((vehicle) => ({
+    vehicle,
+    available: Number(vehicle.inventory_count ?? 1),
+  }));
 }
 
 async function resolveVehicleSelection(
@@ -417,6 +445,7 @@ function bookingCopy(language: string) {
       bookingCreated: (id: string) =>
         `Reserva creada. ID: ${id}. ¿Quieres añadir algún detalle extra?`,
       cancelled: "Reserva cancelada. Si quieres empezar de nuevo, avísame.",
+      goodbye: "¡Gracias! Si quieres reservar más tarde, avísame.",
     };
   }
 
@@ -435,6 +464,7 @@ function bookingCopy(language: string) {
       bookingCreated: (id: string) =>
         `Đã tạo đặt xe. Mã: ${id}. Bạn muốn bổ sung chi tiết gì không?`,
       cancelled: "Đã huỷ quy trình đặt xe. Nếu muốn bắt đầu lại, hãy nói mình.",
+      goodbye: "Cảm ơn bạn! Khi cần đặt xe, cứ nói mình nhé.",
     };
   }
 
@@ -451,5 +481,6 @@ function bookingCopy(language: string) {
     bookingCreated: (id: string) =>
       `Booking created. ID: ${id}. Do you want to add any extra details?`,
     cancelled: "Booking cancelled. If you want to start again, just tell me.",
+    goodbye: "Thanks! If you want to book later, just let me know.",
   };
 }
