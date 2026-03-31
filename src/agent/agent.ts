@@ -11,6 +11,7 @@ const openai = new OpenAI({
 
 export async function askAgent(userMessage: string) {
   const intent = detectIntent(userMessage);
+  const userLanguage = detectLanguage(userMessage);
 
   // 1. SEARCH
   const docs = await searchKnowledge(userMessage);
@@ -48,7 +49,7 @@ export async function askAgent(userMessage: string) {
     messages: [
       {
         role: "system",
-        content: buildSystemPrompt(),
+        content: buildSystemPrompt(userLanguage),
       },
       {
         role: "user",
@@ -74,6 +75,31 @@ ${userMessage}
   }
 
   return answer;
+}
+
+function detectLanguage(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return "English";
+
+  const lower = trimmed.toLowerCase();
+  if (/[áéíóúüñ¿¡]/i.test(trimmed)) return "Spanish";
+  if (/[àáạảãăằắặẳẵâầấậẩẫèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(trimmed)) {
+    return "Vietnamese";
+  }
+
+  if (
+    /\b(que|como|donde|quiero|alquilar|coche|precio|horas|dias|reserva|gracias)\b/.test(
+      lower
+    )
+  ) {
+    return "Spanish";
+  }
+
+  if (/\b(xe|thuê|gia|giá|bao|giờ|ngày|đặt)\b/.test(lower)) {
+    return "Vietnamese";
+  }
+
+  return "English";
 }
 
 async function recordKnowledgeGap(
