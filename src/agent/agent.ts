@@ -4,14 +4,22 @@ import { buildContext } from "../lib/context.js";
 import { detectIntent } from "../lib/intent.js";
 import { buildSystemPrompt } from "../prompts/system.js";
 import { supabase } from "../lib/supabase.js";
+import { handleBookingRequest } from "../lib/booking.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-export async function askAgent(userMessage: string) {
+export async function askAgent(userMessage: string, sessionId: string = "default") {
   const intent = detectIntent(userMessage);
   const userLanguage = detectLanguage(userMessage);
+
+  const bookingResponse = await handleBookingRequest(
+    userMessage,
+    userLanguage,
+    sessionId
+  );
+  if (bookingResponse) return bookingResponse;
 
   // 1. SEARCH
   const docs = await searchKnowledge(userMessage);
