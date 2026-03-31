@@ -46,6 +46,7 @@ async function seed() {
       ...entry,
       source: "manual",
       confidence: 1.0,
+      content: entry.fullAnswer,
       vector: emb.data[0].embedding,
     });
   }

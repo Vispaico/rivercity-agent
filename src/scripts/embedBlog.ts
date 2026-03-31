@@ -36,10 +36,11 @@ async function run() {
 
       await supabase.from("documents").insert({
         content: chunk,
-        embedding: embedding.data[0].embedding,
+        fullAnswer: chunk,
         source: "blog",
         title: post.title,
         url: `https://www.rivercitybikerentals.com/blog/${post.slug}`,
+        vector: embedding.data[0].embedding,
       });
 
       console.log("✅ Embedded chunk:", post.title);

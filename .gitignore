@@ -27,4 +27,8 @@ yarn-error.log*
 
 # Example Fies
 documents_rows.json
+knowledge_rows.json
+
+# SQL scripts
+setup_documents.sql
 

@@ -3,6 +3,7 @@ import { searchKnowledge } from "../lib/search.js";
 import { buildContext } from "../lib/context.js";
 import { detectIntent } from "../lib/intent.js";
 import { buildSystemPrompt } from "../prompts/system.js";
+import { supabase } from "../lib/supabase.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -32,6 +33,7 @@ export async function askAgent(userMessage: string) {
   console.log("[agent] threshold:", threshold, "filtered_count:", filtered.length);
 
   if (!filtered.length) {
+    await recordKnowledgeGap(userMessage, intent, "no_filtered_docs");
     console.log("[agent] fallback_reason: no_filtered_docs");
     return "I'm not sure about that, let me check with our team.";
   }
@@ -66,9 +68,26 @@ ${userMessage}
 
   // 5. GUARDRAIL
   if (!answer || answer.length < 10) {
+    await recordKnowledgeGap(userMessage, intent, "short_or_empty_answer");
     console.log("[agent] fallback_reason: short_or_empty_answer");
     return "I'm not sure about that, let me check with our team.";
   }
 
   return answer;
+}
+
+async function recordKnowledgeGap(
+  query: string,
+  intent: string,
+  reason: string
+) {
+  try {
+    await supabase.from("knowledge_gaps").insert({
+      query,
+      intent,
+      reason,
+    });
+  } catch (err) {
+    console.error("[agent] knowledge_gaps insert failed", err);
+  }
 }
