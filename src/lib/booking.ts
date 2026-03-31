@@ -3,9 +3,7 @@ import { supabase } from "./supabase.js";
 type VehicleRow = {
   id: string;
   name?: string | null;
-  brand?: string | null;
-  model?: string | null;
-  type?: string | null;
+  category?: string | null;
   price_per_hour?: number | null;
   price_per_day?: number | null;
   price_per_week?: number | null;
@@ -309,16 +307,16 @@ async function resolveVehicleSelection(
 ) {
   const lower = message.toLowerCase();
   const matches = vehicles.filter((vehicle) => {
-    const name = [vehicle.name, vehicle.brand, vehicle.model]
+    const name = [vehicle.name, vehicle.name, vehicle.category]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
     if (name && lower.includes(name)) return true;
-    if (preference === "car" && vehicle.type?.toLowerCase().includes("car"))
+    if (preference === "car" && vehicle.category?.toLowerCase().includes("car"))
       return true;
     if (
       preference === "motorbike" &&
-      vehicle.type?.toLowerCase().includes("bike")
+      vehicle.category?.toLowerCase().includes("bike")
     )
       return true;
     if (preference === "manual" && lower.includes("manual")) return true;
@@ -369,7 +367,7 @@ function formatAvailabilityList(
 }
 
 function formatVehicle(vehicle: VehicleRow) {
-  const name = [vehicle.name, vehicle.brand, vehicle.model]
+  const name = [vehicle.name, vehicle.name, vehicle.category]
     .filter(Boolean)
     .join(" ")
     .trim();
