@@ -13,12 +13,26 @@ export async function askAgent(userMessage: string) {
 
   // 1. SEARCH
   const docs = await searchKnowledge(userMessage);
+  console.log("[agent] query:", userMessage);
+  console.log("[agent] intent:", intent);
+  console.log("[agent] docs_count:", docs.length);
+  console.log(
+    "[agent] top_docs:",
+    docs.slice(0, 3).map((d, i) => ({
+      rank: i + 1,
+      score: Number(d.score ?? d.confidence ?? 0),
+      source: d.source ?? null,
+      snippet: String(d.fullAnswer ?? "").slice(0, 120),
+    }))
+  );
 
   // 2. HARD FILTER
   const threshold = intent === "business" ? 0.65 : 0.55;
   const filtered = docs.filter((d) => Number(d.score ?? d.confidence ?? 0) >= threshold);
+  console.log("[agent] threshold:", threshold, "filtered_count:", filtered.length);
 
   if (!filtered.length) {
+    console.log("[agent] fallback_reason: no_filtered_docs");
     return "I'm not sure about that, let me check with our team.";
   }
 
@@ -48,9 +62,11 @@ ${userMessage}
   });
 
   const answer = res.choices[0].message.content;
+  console.log("[agent] llm_answer_preview:", String(answer ?? "").slice(0, 200));
 
   // 5. GUARDRAIL
   if (!answer || answer.length < 10) {
+    console.log("[agent] fallback_reason: short_or_empty_answer");
     return "I'm not sure about that, let me check with our team.";
   }
 
