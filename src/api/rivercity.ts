@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { runAgent } from '../agent/agent.js';
+import { askAgent } from '../agent/agent.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -10,7 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!message) return res.status(400).json({ error: 'Message is required' });
 
   try {
-    const response = await runAgent(message);
+    const response = await askAgent(message);
     res.status(200).json({ response });
   } catch (err: any) {
     console.error('Agent API error:', err);
