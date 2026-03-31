@@ -15,13 +15,19 @@ export async function searchKnowledge(query: string) {
   const embedding = emb.data[0].embedding;
 
   // 2. VECTOR SEARCH
-  const { data: vectorDocs } = await supabase.rpc("match_documents", {
+  const { data: vectorDocs, error: vectorError } = await supabase.rpc("match_documents", {
     query_embedding: embedding,
     match_count: 10,
   });
 
+  console.log("[search] vector search", {
+    error: vectorError?.message,
+    count: vectorDocs?.length ?? 0,
+    keys: vectorDocs?.[0] ? Object.keys(vectorDocs[0]) : [],
+  });
+
   // 3. KEYWORD SEARCH (FTS)
-  const { data: keywordDocs } = await supabase
+  const { data: keywordDocs, error: keywordError } = await supabase
     .from("documents")
     .select("*")
     .textSearch("fts", query, {
@@ -29,8 +35,34 @@ export async function searchKnowledge(query: string) {
     })
     .limit(10);
 
+  console.log("[search] keyword search", {
+    error: keywordError?.message,
+    count: keywordDocs?.length ?? 0,
+    keys: keywordDocs?.[0] ? Object.keys(keywordDocs[0]) : [],
+  });
+
+  let fallbackDocs: any[] = [];
+  if (!keywordDocs || keywordDocs.length === 0) {
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from("documents")
+      .select("*")
+      .or(`fullAnswer.ilike.%${query}%,content.ilike.%${query}%`)
+      .limit(10);
+
+    fallbackDocs = fallbackData || [];
+    console.log("[search] keyword fallback", {
+      error: fallbackError?.message,
+      count: fallbackDocs.length,
+      keys: fallbackDocs[0] ? Object.keys(fallbackDocs[0]) : [],
+    });
+  }
+
   // 4. MERGE
-  const combined = [...(vectorDocs || []), ...(keywordDocs || [])];
+  const combined = [
+    ...(vectorDocs || []),
+    ...(keywordDocs || []),
+    ...fallbackDocs,
+  ];
 
   // 5. RANK + DEDUPE
   return rankAndFilter(combined);
