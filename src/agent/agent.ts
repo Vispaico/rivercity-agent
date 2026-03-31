@@ -15,7 +15,8 @@ export async function askAgent(userMessage: string) {
   const docs = await searchKnowledge(userMessage);
 
   // 2. HARD FILTER
-  const filtered = docs.filter((d) => d.confidence >= 0.8);
+  const threshold = intent === "business" ? 0.65 : 0.55;
+  const filtered = docs.filter((d) => (d.score ?? d.confidence ?? 0) >= threshold);
 
   if (!filtered.length) {
     return "I'm not sure about that, let me check with our team.";
