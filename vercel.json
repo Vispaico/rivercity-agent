@@ -5,5 +5,11 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/src/api/$1.ts" }
-  ]
+  ],
+  "crons": [
+    {
+      "path": "/api/crawl",
+      "schedule": "0 3 * * *"
+    }
+  ] 
 }

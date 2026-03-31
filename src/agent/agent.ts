@@ -1,71 +1,57 @@
-import { openai } from "../lib/openai.js";
+import OpenAI from "openai";
+import { searchKnowledge } from "../lib/search.js";
+import { buildContext } from "../lib/context.js";
+import { detectIntent } from "../lib/intent.js";
 import { buildSystemPrompt } from "../prompts/system.js";
-import { searchKnowledge } from "../tools/searchKnowledge.js";
-import { Document } from "../types/document.js";
 
-export async function runAgent(message: string) {
-  const system = buildSystemPrompt();
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
 
-  // 1️⃣ Ask GPT if a tool call is needed
-  const response = await openai.responses.create({
+export async function askAgent(userMessage: string) {
+  const intent = detectIntent(userMessage);
+
+  // 1. SEARCH
+  const docs = await searchKnowledge(userMessage);
+
+  // 2. HARD FILTER
+  const filtered = docs.filter((d) => d.confidence >= 0.8);
+
+  if (!filtered.length) {
+    return "I'm not sure about that, let me check with our team.";
+  }
+
+  // 3. CONTEXT
+  const context = buildContext(filtered);
+
+  // 4. LLM
+  const res = await openai.chat.completions.create({
     model: "gpt-4o-mini",
-    temperature: 0.3,
-    tools: [
+    temperature: 0.2,
+    messages: [
       {
-        type: "function",
-        name: "searchKnowledge",
-        description: "Search internal knowledge about RiverCity Bike Rentals",
-        parameters: {
-          type: "object",
-          properties: { query: { type: "string" } },
-          required: ["query"],
-          additionalProperties: false,
-        },
-        strict: true,
+        role: "system",
+        content: buildSystemPrompt(),
       },
-    ],
-    input: [
-      { role: "system", content: system },
-      { role: "user", content: message },
+      {
+        role: "user",
+        content: `
+Context:
+${context}
+
+Question:
+${userMessage}
+        `,
+      },
     ],
   });
 
-  // 2️⃣ Check if GPT requested a tool call
-  const functionCall = response.output.find(
-    (item) => item.type === "function_call"
-  );
+  const answer = res.choices[0].message.content;
 
-  if (functionCall && functionCall.name === "searchKnowledge") {
-    const args = JSON.parse(functionCall.arguments);
-
-    // 3️⃣ Run internal search
-    const results: Document[] = await searchKnowledge(args.query);
-
-    // 4️⃣ Map search results to OpenAI function output format
-    const functionCallOutput = results.map((doc) => ({
-      type: "input_text" as const, // TS literal type
-      text: doc.fullAnswer,
-    }));
-
-    // 5️⃣ Return final response with tool output
-    const finalResponse = await openai.responses.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
-      input: [
-        { role: "system", content: system },
-        { role: "user", content: message },
-        functionCall,
-        {
-          type: "function_call_output",
-          call_id: functionCall.call_id,
-          output: functionCallOutput,
-        },
-      ],
-    });
-
-    return finalResponse.output_text;
+  // 5. GUARDRAIL
+  if (!answer || answer.length < 10) {
+    return "I'm not sure about that, let me check with our team.";
   }
 
-  // 6️⃣ Otherwise just return GPT’s direct response
-  return response.output_text;
+  return answer;
 }

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "type": "module",       
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -12,8 +12,11 @@
   "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.100.1",
+    "axios": "^1.14.0",
+    "cheerio": "^1.2.0",
     "dotenv": "^17.3.1",
-    "openai": "^6.33.0"
+    "openai": "^6.33.0",
+    "playwright": "^1.58.2"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
