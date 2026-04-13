@@ -279,7 +279,7 @@ function missingIntakeFields(intake: BookingIntake) {
   return missing;
 }
 
-async function getAvailableVehicles() {
+export async function getAvailableVehicles() {
   const { data, error } = await supabase
     .from("vehicles")
     .select(
@@ -348,7 +348,7 @@ async function createBooking(
   return data;
 }
 
-function formatAvailabilityList(
+export function formatAvailabilityList(
   language: string,
   available: { vehicle: VehicleRow; available: number }[]
 ) {
@@ -366,7 +366,7 @@ function formatAvailabilityList(
   return `${header}\n${items}`;
 }
 
-function formatVehicle(vehicle: VehicleRow) {
+export function formatVehicle(vehicle: VehicleRow) {
   const name = [vehicle.name, vehicle.name, vehicle.category]
     .filter(Boolean)
     .join(" ")

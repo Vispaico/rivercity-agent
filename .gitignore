@@ -33,3 +33,4 @@ vehicles_rows.json
 # SQL scripts
 setup_documents.sql
 setup_agent_sessions.sql
+setup_rate_limits.sql
