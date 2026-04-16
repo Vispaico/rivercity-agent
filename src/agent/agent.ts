@@ -83,7 +83,7 @@ export async function askAgent(userMessage: string, sessionId: string = "default
 
     await recordKnowledgeGap(userMessage, intent, "no_filtered_docs");
     console.log("[agent] fallback_reason: no_filtered_docs");
-    return "I'm not sure about that, let me check with our team.";
+    return buildCheckWithTeamMessage(userLanguage);
   }
 
   // 3. CONTEXT
@@ -120,7 +120,7 @@ ${userMessage}
   if (!answer || answer.length < 10) {
     await recordKnowledgeGap(userMessage, intent, "short_or_empty_answer");
     console.log("[agent] fallback_reason: short_or_empty_answer");
-    return "I'm not sure about that, let me check with our team.";
+    return buildCheckWithTeamMessage(userLanguage);
   }
 
   return answer;
@@ -130,11 +130,7 @@ async function detectLanguage(text: string, sessionId: string) {
   const trimmed = text.trim();
   if (!trimmed) return "English";
 
-  const cached = languageCache.get(sessionId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.language;
-  }
-
+  // Explicit user request should ALWAYS override any cached session language.
   const requested = extractRequestedLanguage(trimmed);
   if (requested) {
     languageCache.set(sessionId, {
@@ -142,6 +138,15 @@ async function detectLanguage(text: string, sessionId: string) {
       expiresAt: Date.now() + LANGUAGE_CACHE_TTL_MS,
     });
     return requested;
+  }
+
+  const cached = languageCache.get(sessionId);
+  const cachedLanguage =
+    cached && cached.expiresAt > Date.now() ? cached.language : null;
+
+  // For very short/ambiguous messages, stick to the session language.
+  if (cachedLanguage && trimmed.length <= 6) {
+    return cachedLanguage;
   }
 
   const heuristic = heuristicDetectLanguage(trimmed);
@@ -153,7 +158,7 @@ async function detectLanguage(text: string, sessionId: string) {
     return heuristic;
   }
 
-  if (trimmed.length < 4) return "English";
+  if (trimmed.length < 4) return cachedLanguage ?? "English";
 
   try {
     const detection = await openai.chat.completions.create({
@@ -214,19 +219,45 @@ function heuristicDetectLanguage(text: string) {
 }
 
 function extractRequestedLanguage(text: string) {
-  const lower = text.toLowerCase();
+  const lower = text.toLowerCase().trim();
+
+  // Common explicit directives (try to catch even very short messages like "In English" / "English please").
   const patterns = [
+    // "respond in English", "speak in Spanish", etc.
     /\b(answer|respond|reply|write|speak)\s+(in|using)\s+([a-záéíóúüñàèìòùâêîôûäëïöüãõ\s]+)\b/i,
+
+    // "en español", "tiếng việt", etc.
     /\b(en|em)\s+(español|português|portugues|français|deutsch|italiano|tiếng việt|vietnamese|spanish|english|french|german|italian|portuguese)\b/i,
+
+    // "in English"
+    /^in\s+([a-záéíóúüñàèìòùâêîôûäëïöüãõ\s]+)$/i,
+
+    // "English please" / "Spanish pls"
+    /^([a-záéíóúüñàèìòùâêîôûäëïöüãõ\s]+?)\s*(please|pls|por favor|porfa|bitte|s'il vous plaît|svpl|per favore)?$/i,
+
+    // "do you speak English?" (treat as a language preference signal)
+    /\bdo you speak\s+([a-záéíóúüñàèìòùâêîôûäëïöüãõ\s]+)\b/i,
   ];
 
   for (const pattern of patterns) {
     const match = lower.match(pattern);
     if (match) {
-      const phrase = (match[3] || match[2] || "").trim();
+      const phrase = (match[3] || match[2] || match[1] || "").trim();
       const normalized = normalizeLanguage(phrase);
       if (SUPPORTED_LANGUAGES.includes(normalized)) return normalized;
     }
+  }
+
+  // If the entire message is basically just a language name (optionally with politeness words), accept it.
+  const stripped = lower
+    .replace(/\b(please|pls|por favor|porfa|bitte|per favore|s'il vous plaît)\b/g, "")
+    .replace(/[^a-záéíóúüñàèìòùâêîôûäëïöüãõ\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (stripped) {
+    const normalized = normalizeLanguage(stripped);
+    if (SUPPORTED_LANGUAGES.includes(normalized)) return normalized;
   }
 
   return null;
@@ -267,6 +298,19 @@ function isVehicleListInquiry(message: string) {
   return /\b(what.*(vehicles|motorbikes|bikes|cars)|vehicles available|available vehicles|what do you have|price list|price per day|pricing|rentals list)\b/i.test(
     message
   );
+}
+
+function buildCheckWithTeamMessage(language: string) {
+  if (language === "Spanish") {
+    return "No estoy seguro de eso, déjame consultarlo con nuestro equipo.";
+  }
+
+  if (language === "Vietnamese") {
+    return "Mình chưa chắc về điều đó, để mình kiểm tra lại với đội ngũ nhé.";
+  }
+
+  // Default
+  return "I'm not sure about that, let me check with our team.";
 }
 
 function buildClarifyingQuestion(intent: string, language: string) {
